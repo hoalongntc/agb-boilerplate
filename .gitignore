@@ -1,0 +1,9 @@
+.idea
+.git
+
+# Log files
+*.log
+
+# Bower and npm modules
+library
+node_modules
