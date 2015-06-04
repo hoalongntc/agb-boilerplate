@@ -5,5 +5,5 @@
 *.log
 
 # Bower and npm modules
-library
+vendor
 node_modules

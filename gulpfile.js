@@ -2,7 +2,8 @@
 var gulp = require('gulp');
 
 // plugins
-var run = require('run-sequence')
+var path = require('path')
+    , run = require('run-sequence')
     , argv = require('yargs').argv
     , open = require('gulp-open')
     , clean = require('gulp-clean')
@@ -15,14 +16,19 @@ var run = require('run-sequence')
     , minifyCSS = require('gulp-minify-css')
     , uglifyJS = require('gulp-uglify')
     , bowerFile = require('main-bower-files')
-    , browserify = require('gulp-browserify');
+    , browserify = require('browserify')
+    , globby = require('globby')
+    , through = require('through2')
+    , annotate = require('gulp-ng-annotate')
+    , source = require('vinyl-source-stream');
 
 var ROOT_PATH = argv.app || 'app';
+var LISTEN_PORT = argv.port || 9000;
 var Path = {
     app: {
         dir: ROOT_PATH,
         all: ROOT_PATH + '/*',
-        url: 'http://localhost:8080/' + ROOT_PATH,
+        url: 'http://localhost:' + LISTEN_PORT + '/' + ROOT_PATH,
 
         html: {
             dir:  ROOT_PATH + '/views',
@@ -52,7 +58,7 @@ var Path = {
         root: 'dist',
         dir: 'dist/' + ROOT_PATH,
         all: 'dist/' + ROOT_PATH + '/*',
-        url: 'http://localhost:8080/dist/' + ROOT_PATH,
+        url: 'http://localhost:' + LISTEN_PORT + '/dist/' + ROOT_PATH,
 
         html: {
             dir: 'dist/' + ROOT_PATH + '/views',
@@ -116,8 +122,6 @@ gulp.task('inject-build', function () {
         }
     });
 
-
-
     return gulp.src(Path.dist.html.main)
         .pipe(inject(gulp.src(bCSS.concat([Path.dist.js.vendor]), {read: false}), {name: 'bower', relative: true}))
         .pipe(inject(gulp.src([Path.dist.js.main, Path.dist.css.main], {read: false}), {relative: true}))
@@ -142,13 +146,31 @@ gulp.task('minify-css', ['less-css'], function () {
 
 /** Task browserify **/
 gulp.task('browserify', function() {
-    return gulp.src(Path.app.js.all)
-        .pipe(browserify({
-            insertGlobals: true,
-            debug: true
-        }))
-        .pipe(concat('bundled.js'))
+    var stream = through();
+    stream
+        .pipe(source('bundled.js'))
+        .pipe(annotate())
         .pipe(gulp.dest(Path.app.js.dir));
+
+    globby(Path.app.js.all, function(err, entries) {
+        if (err) return stream.emit('error', err);
+
+        var sortedEntries = [];
+
+        entries.forEach(function(entry) {
+            if(entry.indexOf('main.ng.js') > -1) sortedEntries.splice(0, 0, entry);
+            else sortedEntries.push(entry);
+        });
+
+        var b = browserify({
+            entries: sortedEntries,
+            debug: true
+        });
+
+        b.bundle().pipe(stream);
+    });
+
+    return stream;
 });
 
 /** Task uglify-js **/
@@ -209,7 +231,7 @@ gulp.task('copy-resources', function() {
 
 /** Task connect **/
 gulp.task('connect', function () {
-    connect.server({root: [__dirname], livereload: true, port: 8080});
+    connect.server({root: [__dirname], livereload: true, port: LISTEN_PORT});
 });
 
 /** Task connect-reload **/
